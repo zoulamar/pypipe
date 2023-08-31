@@ -1,0 +1,157 @@
+#!/usr/bin/env python3
+
+import argparse
+from datetime import datetime
+from collections import defaultdict
+from typing import Union
+from pathlib import Path
+from pprint import pprint
+from colored import attr
+import os
+from module import BaseModule
+
+this_file = Path(__file__)
+
+# Subcommands implementations
+def cmd_make(module:Path, target:str, pipeline_root:Path, recurse:bool, force:bool, *args, **kwargs):
+    """ Evaluates one particular target piece of data.
+
+    `what`: One particular piece of output data, has to be in list of Module's declared outputs.
+    """
+    mod = BaseModule.resolve_module_by_spec(module, pipeline_root)
+    try:
+        t = mod.targets[target]
+    except KeyError:
+        print("Target not known! Try calling `show` command which lists all available targets. ")
+        raise SystemExit()
+
+    if t.is_up_to_date():
+        print(f"Note, that the selected target {target} was already up-to-date. However, since launched like this, the target will be made even tough.")
+
+    t.make(recurse=recurse, force=force)
+
+def cmd_show(module:Path, pipeline_root:Path, target:Union[str,None]=None, *args, **kwargs):
+    mod = modules.BaseModule.resolve_module_by_spec(module, pipeline_root)
+    print(f"{attr('underlined')}Module to be shown:{attr('reset')}:")
+    print(mod)
+    print(f"{attr('underlined')}Module's pipeline:{attr('reset')}:")
+    mod_list = mod.enumerate_pipeline()
+    for pipeline_cnt, mod_shown in enumerate(mod_list):
+        print(f" {pipeline_cnt:2}: {type(mod_shown).__name__} {attr('dim')}({mod_shown.module_path.resolve()}){attr('reset')}")
+
+    print(f"{attr('underlined')}Module's available targets:{attr('reset')}")
+    for n, t in mod.targets.items():
+        print(f"{attr('bold')}{n:<10}{attr('reset')} {t}")
+    if target is not None:
+        t = mod.targets[target]
+        print(f"{attr('underlined')}Selected target:{attr('reset')}")
+        print(t)
+        print(f"{attr('underlined')}Antedescent Targets:{attr('reset')}")
+        pprint(t.depends)
+        #print(f"{attr('underlined')}Selected target detail:{attr('reset')}")
+        #print(t.str_detailed())
+    """ """
+
+def cmd_scan(module:Path, pipeline_root:Path, output:Path, recurse:bool, execute:bool, *args, **kwargs):
+    """ Produces an executable bash script which correctly computes given part of Pipeline.
+
+    TODO: Make each module compute its resource requirements such that a number of running processes can be dynamically managed not toexceed RAM.
+    The memory usage may be watched by
+    https://stackoverflow.com/questions/938733/total-memory-used-by-python-process
+
+    ```
+    import os, psutil
+    process = psutil.Process(os.getpid())
+    print(process.memory_info().rss)  # in bytes
+    ```
+
+    or on UNIX as
+    ```
+    resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+    ```
+    """
+
+    modstack = [modules.BaseModule.resolve_module_by_spec(module, pipeline_root)]
+    per_depth_per_nproc = defaultdict(lambda : defaultdict(list))
+    while len(modstack) > 0:
+        mod = modstack.pop()
+        print(f"Examine module {mod.__repr__()}")
+        for n, t, d in sorted([(n, t, t.depth) for (n , t) in mod.targets.items()]):
+            print(f" - {t}")
+            if not t.is_up_to_date():
+                t.mark_as_touched()
+                per_depth_per_nproc[d][t.parallelizable].append(f"{mod.module_path} -t {n}")
+        if recurse:
+            for m in filter(lambda x : x.is_dir(), mod.module_path.glob("[!#]*")):
+                #print(m)
+                modstack.append(modules.BaseModule.resolve_module_by_path(m))
+
+    if output is None:
+        f = sys.stderr
+    else:
+        f = open(output, "w")
+    f.write(f"# START OF GENERATED SCRIPT ({datetime.now()})\n")
+    for depth in sorted(list(per_depth_per_nproc.keys())):
+        for nproc in per_depth_per_nproc[depth]:
+            parallel_command = "parallel --bar --jobs " + nproc + " --colsep ' ' \"./ctl.py make {}\""
+            f.write(f"echo 'Computing computation depth {depth}.'\n")
+            f.write(parallel_command + " <<InplaceGeneratedJobList\n")
+            f.write("\n".join(per_depth_per_nproc[depth][nproc]))
+            f.write("\nInplaceGeneratedJobList\n\n")
+    f.write("# END OF GENERATED SCRIPT\n")
+    if execute:
+        # Just take the string and pipe it to bash.
+        raise NotImplementedError("Need to test this first.")
+    if output is not None:
+        f.close()
+        os.chmod(output, 0o774)
+
+def cmd_report(pipeline_root:Path, *args, **kwargs):
+    """ Just dumps all reports... """
+    print("Root: ", pipeline_root)
+    for report_path in pipeline_root.rglob("Report*/report.txt"):
+        print(report_path)
+        with open(report_path, "r") as f:
+            print(f.read())
+
+def cmd_none(_):
+    print("No command provided.")
+
+# Load arguments
+argp = argparse.ArgumentParser(description="Pipeline Management and Execution Tool. This script can be used to consistently compute whatewer's needed.")
+argp.add_argument("--verbose", "-v", action="store_true")
+argp.add_argument("--pipeline-root", default=this_file.parent/"PipelineRootCommsRosified", type=Path, help="A directory containing the defined (or to-be-defined) computational pipeline.")
+argp.set_defaults(func=cmd_none)
+argps = argp.add_subparsers(description='')
+
+# Show what to do with a Module.
+argp_show = argps.add_parser(name="show", description="Shows all the useful information about given Module and its current state.")
+argp_show.add_argument("module", type=Path, help="Specify a directory relative to `--pipeline-root` or an unique label which defines module to compute.")
+argp_show.add_argument("--target", "-t", type=str, default=None, help="An output to be shown.")
+argp_show.set_defaults(func=cmd_show)
+
+# Make subcommand
+argp_make = argps.add_parser(name="make", description="Makes a particular target of given module.")
+argp_make.add_argument("module", type=Path, help="Specify a directory relative to `--pipeline-root` which defines module to compute.")
+argp_make.add_argument("--target", "-t", type=str, required=True, help="An output to be created. (Use `show` command to see available outputs.)")
+argp_make.add_argument("--recurse", "-r", action="store_true", help="Make recursively all prequisite targets before doing this target.")
+argp_make.add_argument("--force", "-f", action="store_true", help="Force recomputation.")
+argp_make.set_defaults(func=cmd_make)
+
+# Scan subcommand
+argp_scan = argps.add_parser(name="scan", description="Scans the pipeline and prepares a parallelized shell script which computes what's out of date.")
+argp_scan.add_argument("module", type=Path, help="Specify a directory relative to `--pipeline-root` or an unique label which defines module to compute.")
+argp_scan.add_argument("--output", "-o", type=Path, default=None, help="An output to be created. (Use `show` command to see available outputs.)")
+argp_scan.add_argument("--recurse", "-r", action="store_true", help="Recurse.")
+argp_scan.add_argument("--execute", "-e", action="store_true", help="Pass the commands directly to bash launched as subprocess.")
+argp_scan.set_defaults(func=cmd_scan)
+
+# Report subcommand
+argp_report = argps.add_parser(name="report", description="Performs some reporting.")
+#argp_report.add_argument("module", default=None, type=Path, help="If not given, searches for all terminal modules in the Pipeline and tries to report them together.")
+#argp_report.add_argument("--target", "-t", type=str, required=True, help="An output to be reported. (If not given, whole module will be reported.)")
+argp_report.set_defaults(func=cmd_report)
+
+args = argp.parse_args()
+
+args.func(**args.__dict__)
