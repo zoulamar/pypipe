@@ -5,6 +5,6 @@ setup(name='pypipe',
       description='Automated and efficient evaluation framework.',
       author='zoulamar',
       author_email='zoulamar@fel.cvut.cz',
-      licence='MIT',
+      license='MIT',
       packages=['pypipe'],
       zip_safe=False)
