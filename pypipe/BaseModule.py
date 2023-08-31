@@ -3,9 +3,9 @@
 from abc import ABC, abstractmethod
 import importlib
 from pathlib import Path
+from pprint import pformat
 from typing import Dict, List, Union, final, Type
-
-from ..type.GenericDataType import GenericDataType
+from . import GenericDataType
 
 class BaseModule(ABC):
     """
@@ -26,19 +26,27 @@ class BaseModule(ABC):
     ACTIVE_MODULE_REGISTRY:Dict[Path,"BaseModule"] = {}
     """ A lookup table (Path->BaseModule instance) to prevent loading of duplicate Modules. """
 
+    @final
     @staticmethod
-    def resolve_module_by_spec(spec:Path, root:Path) -> "BaseModule":
-        """ Finds a suitable model according to some describing specificaiton.
+    def resolve_module_by_spec(spec:str, root:Path) -> "BaseModule":
+        """ Translates some module specificator pattern into absolute module path.
 
         `spec`: Specification of which particular model to use. If starts with "/", then correct full path from `root` expected. If no slashes present, find by name or label.
         `root`: Pipeline root.
         """
 
-        if spec == root:
+        # E.g., the root is pwd and I want to load it.
+        if Path(spec) == root:
             return BaseModule.resolve_module_by_path(root)
 
+        # First try whether the specification matches some existing directory. If so, no other hard work needs to be done.
+        if (root / spec).is_dir():
+            return BaseModule.resolve_module_by_path(root / spec)
+
+        raise NotImplementedError("The following logic was working, but I deem it messy. Hopefully I won't need to see it again soon.")
+
         # Find a correct folder.
-        print(f"Resolving model given a specification >>{spec}<<")
+        print(f"Resolving model given a specification >>{spec}<< w.r.t. selected root module: {root}")
         if len(spec.parts) == 1:
             # Search either by module type or label.
             dotcount = spec.name.count(".")
@@ -57,7 +65,7 @@ class BaseModule(ABC):
                 hits = list(root.glob(f"**/{stem}.{ext}/"))
             else:
                 raise ValueError("Not supported.")
-            assert len(hits) == 1, f"Modules have to be labeled uniquely in order to find them thus. Candidates: \n{hits}"
+            assert len(hits) == 1, f"Modules have to be labeled uniquely in order to find them thus. Candidates: \n{pformat(hits)}"
             module_abs = hits[0]
         else:
             # Explicit determination.
@@ -68,6 +76,7 @@ class BaseModule(ABC):
         print(f"Resolved module path: {module_abs.resolve()}")
         return BaseModule.resolve_module_by_path(module_abs)
 
+    @final
     @staticmethod
     def resolve_module_by_path(path:Path) -> "BaseModule":
         """ Quite simply inspects a Module's folder name and selects a correct Python module to use. """
@@ -77,6 +86,7 @@ class BaseModule(ABC):
         loaded = BaseModule.module_lazy_loader(pymodule_name)(path)
         return loaded
 
+    @final
     @staticmethod
     def module_lazy_loader(pymodule_name) -> Type["BaseModule"]:
         """ This is a function which returns a callable `class` efficiently.

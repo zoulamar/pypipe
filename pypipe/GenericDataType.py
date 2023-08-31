@@ -4,7 +4,7 @@ import sys
 from abc import ABC, abstractmethod
 import os, time
 from pathlib import Path
-from typing import Callable, Dict, Iterator, Tuple, Type, Union, Any
+from typing import Callable, Dict, Iterator, Tuple, Type, Union, Any, final
 from colored import fg, attr
 
 class GenericDataType(ABC):

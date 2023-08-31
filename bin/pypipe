@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 
+""" A command line tool for launching and manipulating PyPiPe evaluations. Launch with --help for more details. """
+
 import argparse
 from datetime import datetime
 from collections import defaultdict
@@ -7,13 +9,12 @@ from typing import Union
 from pathlib import Path
 from pprint import pprint
 from colored import attr
-import os
-from module import BaseModule
+import os, sys
+from pypipe import BaseModule
 
 this_file = Path(__file__)
 
-# Subcommands implementations
-def cmd_make(module:Path, target:str, pipeline_root:Path, recurse:bool, force:bool, *args, **kwargs):
+def cmd_make(module:Path, target:str, pipeline_root:Path, recurse:bool, force:bool, *args, **kwargs) -> None:
     """ Evaluates one particular target piece of data.
 
     `what`: One particular piece of output data, has to be in list of Module's declared outputs.
@@ -31,7 +32,7 @@ def cmd_make(module:Path, target:str, pipeline_root:Path, recurse:bool, force:bo
     t.make(recurse=recurse, force=force)
 
 def cmd_show(module:Path, pipeline_root:Path, target:Union[str,None]=None, *args, **kwargs):
-    mod = modules.BaseModule.resolve_module_by_spec(module, pipeline_root)
+    mod = BaseModule.resolve_module_by_spec(module, pipeline_root)
     print(f"{attr('underlined')}Module to be shown:{attr('reset')}:")
     print(mod)
     print(f"{attr('underlined')}Module's pipeline:{attr('reset')}:")
@@ -71,7 +72,7 @@ def cmd_scan(module:Path, pipeline_root:Path, output:Path, recurse:bool, execute
     ```
     """
 
-    modstack = [modules.BaseModule.resolve_module_by_spec(module, pipeline_root)]
+    modstack = [BaseModule.resolve_module_by_spec(module, pipeline_root)]
     per_depth_per_nproc = defaultdict(lambda : defaultdict(list))
     while len(modstack) > 0:
         mod = modstack.pop()
@@ -84,7 +85,7 @@ def cmd_scan(module:Path, pipeline_root:Path, output:Path, recurse:bool, execute
         if recurse:
             for m in filter(lambda x : x.is_dir(), mod.module_path.glob("[!#]*")):
                 #print(m)
-                modstack.append(modules.BaseModule.resolve_module_by_path(m))
+                modstack.append(BaseModule.resolve_module_by_path(m))
 
     if output is None:
         f = sys.stderr
@@ -114,13 +115,16 @@ def cmd_report(pipeline_root:Path, *args, **kwargs):
         with open(report_path, "r") as f:
             print(f.read())
 
-def cmd_none(_):
-    print("No command provided.")
+def cmd_none(*_, **__):
+    print("No command provided. Run with --help to see all options.")
+
+def cmd_not_implemented_yet(*_, **__):
+    raise NotImplementedError("Not implemented yet...")
 
 # Load arguments
 argp = argparse.ArgumentParser(description="Pipeline Management and Execution Tool. This script can be used to consistently compute whatewer's needed.")
 argp.add_argument("--verbose", "-v", action="store_true")
-argp.add_argument("--pipeline-root", default=this_file.parent/"PipelineRootCommsRosified", type=Path, help="A directory containing the defined (or to-be-defined) computational pipeline.")
+argp.add_argument("--pipeline-root", "-R", default=Path(os.getcwd()), type=Path, help="A directory containing the defined (or to-be-defined) computational pipeline. User modules and datatypes are sought in the root or in root/src or in module path's directory.")
 argp.set_defaults(func=cmd_none)
 argps = argp.add_subparsers(description='')
 
@@ -151,6 +155,10 @@ argp_report = argps.add_parser(name="report", description="Performs some reporti
 #argp_report.add_argument("module", default=None, type=Path, help="If not given, searches for all terminal modules in the Pipeline and tries to report them together.")
 #argp_report.add_argument("--target", "-t", type=str, required=True, help="An output to be reported. (If not given, whole module will be reported.)")
 argp_report.set_defaults(func=cmd_report)
+
+# Tree subcommand
+argp_tree = argps.add_parser(name="tree", description="Prints the pipeline tree.")
+argp_report.set_defaults(func=cmd_not_implemented_yet)
 
 args = argp.parse_args()
 
