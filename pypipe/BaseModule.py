@@ -4,7 +4,7 @@ from abc import ABC, abstractmethod
 import importlib, os, sys
 from pathlib import Path
 from pprint import pformat
-from typing import Dict, List, Union, final, Type
+from typing import Dict, List, Union, final
 from . import GenericDataType
 
 class BaseModule(ABC):
