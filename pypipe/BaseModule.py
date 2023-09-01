@@ -8,19 +8,13 @@ from typing import Dict, List, Union, final, Type
 from . import GenericDataType
 
 class BaseModule(ABC):
-    """
-    A prescription of a computational Module adhering to my extraordinarily overthought Convention.
+    """ This class provides a convention of a meaningful organizing of the targets.
 
-    A Module dynamically provides a set of named computational targets which together form a dependency tree.
-    This dependency tree may be then computed on-demand or a bash parallel job list can be exported.
-    Conceptually, any Module has its directory counterpart; it loads itself accoding to the folder it is represented by, allowing the user to perform experiments, computations or debugging in some sort of sane and understandable fashion.
-
-    In file-oriented fashion, an external tool is used to invoke a part of pipeline, e.g., for tuning of properties or debugging.
-    In integrated fashion, a sequence of modules is loaded in memory together with their intermediate data.
-
-    A Module has to be Stateless.
-    A Module is in fact only a collection of executable code, the State comes always from other Targets. We simply depend on fast-enough filesystem.
-    I.e., both configuration file (typically `config.yaml`) and intermediate parameter file (model parameters from learning) are just a targets.
+    This class wraps together a semantically related targets.
+    You can think about it as a namespace with an unique set of targets and computation methods.
+    The module dwells at a unique directory where it stores its computational by-products and configurations.
+    A Module provides a set of named computational targets (instances of `GenericDataType`) which then form a target dependency tree.
+    By convention, the targets dwell in the module's directory to facilitate unambiguous namespacing.
     """
 
     ACTIVE_MODULE_REGISTRY:Dict[Path,"BaseModule"] = {}
@@ -102,8 +96,8 @@ class BaseModule(ABC):
             if (path / ending).is_file():
                 pysrc = path / (pymodule_name+'.py')
                 #print(f"module_lazy_loader: Found a source file in module's directory {pysrc}")
-                if not os.getcwd() in sys.path:
-                    sys.path.append(os.getcwd())
+                if not str(path.resolve()) in sys.path:
+                    sys.path.append(str(path.resolve()))
         if pysrc is None and source_space is not None:
             results = sorted(source_space.glob(f"**/{pymodule_name}.py"))
             #print(f"module_lazy_loader: Probe {pformat(results)}")
@@ -165,8 +159,17 @@ class BaseModule(ABC):
         Every target is a GenericDataType instance with correctly set dependencies and `make` method.
         """
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"Module {type(self)} at {self.module_path}"# with config: \n{self.config}"
+
+    def get_root_module(self) -> "BaseModule":
+        inspected = self
+        while inspected is not None:
+            if inspected.is_root_module:
+                return inspected
+            else:
+                inspected = inspected.parent_module
+        raise ValueError("This should never happen.")
 
     def find_ancestor_module(self, what:str) -> Union["BaseModule",None]:
         """ Returns parent module of given name or label. """
