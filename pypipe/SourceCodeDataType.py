@@ -1,4 +1,4 @@
-from . import GenericDataType
+from pypipe import GenericDataType
 import numpy as np
 from typing import Dict
 

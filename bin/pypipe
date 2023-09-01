@@ -14,12 +14,12 @@ from pypipe import BaseModule
 
 this_file = Path(__file__)
 
-def cmd_make(module:Path, target:str, pipeline_root:Path, recurse:bool, force:bool, *args, **kwargs) -> None:
+def cmd_make(module:Path, target:str, pipeline_root:Path, source_space:Path, recurse:bool, force:bool, *args, **kwargs) -> None:
     """ Evaluates one particular target piece of data.
 
     `what`: One particular piece of output data, has to be in list of Module's declared outputs.
     """
-    mod = BaseModule.resolve_module_by_spec(module, pipeline_root)
+    mod = BaseModule.resolve_module_by_spec(module, pipeline_root, source_space)
     try:
         t = mod.targets[target]
     except KeyError:
@@ -31,8 +31,8 @@ def cmd_make(module:Path, target:str, pipeline_root:Path, recurse:bool, force:bo
 
     t.make(recurse=recurse, force=force)
 
-def cmd_show(module:Path, pipeline_root:Path, target:Union[str,None]=None, *args, **kwargs):
-    mod = BaseModule.resolve_module_by_spec(module, pipeline_root)
+def cmd_show(module:Path, pipeline_root:Path, source_space:Path, target:Union[str,None]=None, *args, **kwargs):
+    mod = BaseModule.resolve_module_by_spec(module, pipeline_root, source_space)
     print(f"{attr('underlined')}Module to be shown:{attr('reset')}:")
     print(mod)
     print(f"{attr('underlined')}Module's pipeline:{attr('reset')}:")
@@ -125,6 +125,7 @@ def cmd_not_implemented_yet(*_, **__):
 argp = argparse.ArgumentParser(description="Pipeline Management and Execution Tool. This script can be used to consistently compute whatewer's needed.")
 argp.add_argument("--verbose", "-v", action="store_true")
 argp.add_argument("--pipeline-root", "-R", default=Path(os.getcwd()), type=Path, help="A directory containing the defined (or to-be-defined) computational pipeline. User modules and datatypes are sought in the root or in root/src or in module path's directory.")
+argp.add_argument("--source-space", "-S", default=Path(os.getcwd()), type=Path, help="A directory where definitions of computational modules and user data types dwell. ")
 argp.set_defaults(func=cmd_none)
 argps = argp.add_subparsers(description='')
 

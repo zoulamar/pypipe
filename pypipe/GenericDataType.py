@@ -6,6 +6,7 @@ import os, time
 from pathlib import Path
 from typing import Callable, Dict, Iterator, Tuple, Type, Union, Any, final
 from colored import fg, attr
+from pprint import pformat
 
 class GenericDataType(ABC):
     """ Class which facilitates these things:
@@ -56,13 +57,13 @@ class GenericDataType(ABC):
         """
 
         # Do not allow duplicate instances referring to the same filesystem path!
-        if isinstance(self, SourceCodeDataType):
-            if where in GenericDataType.USED_PATH_REGISTRY:
-                self = GenericDataType.USED_PATH_REGISTRY[where]
-                return
-        else:
-            assert where not in GenericDataType.USED_PATH_REGISTRY, f"Module at path {where} already present:\n{pformat(GenericDataType.USED_PATH_REGISTRY)}"
-            GenericDataType.USED_PATH_REGISTRY[where] = self
+        #if isinstance(self, SourceCodeDataType):
+        #    if where in GenericDataType.USED_PATH_REGISTRY:
+        #        self = GenericDataType.USED_PATH_REGISTRY[where]
+        #        return
+        #else:
+        assert where not in GenericDataType.USED_PATH_REGISTRY, f"Module at path {where} already present:\n{pformat(GenericDataType.USED_PATH_REGISTRY)}"
+        GenericDataType.USED_PATH_REGISTRY[where] = self
 
         self.path:Path = where
         """ A filesystme path where this target resides. """
