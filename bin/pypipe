@@ -53,7 +53,7 @@ def cmd_show(module:Path, pipeline_root:Path, source_space:Path, target:Union[st
         #print(t.str_detailed())
     """ """
 
-def cmd_scan(module:Path, pipeline_root:Path, output:Path, recurse:bool, execute:bool, *args, **kwargs):
+def cmd_scan(module:Path, pipeline_root:Path, output:Path, recurse:bool, verbose:bool, source_space:Path, execute:bool, *args, **kwargs):
     """ Produces an executable bash script which correctly computes given part of Pipeline.
 
     TODO: Make each module compute its resource requirements such that a number of running processes can be dynamically managed not toexceed RAM.
@@ -72,7 +72,7 @@ def cmd_scan(module:Path, pipeline_root:Path, output:Path, recurse:bool, execute
     ```
     """
 
-    modstack = [BaseModule.resolve_module_by_spec(module, pipeline_root)]
+    modstack = [BaseModule.resolve_module_by_spec(module, pipeline_root, source_space, verbose=verbose)]
     per_depth_per_nproc = defaultdict(lambda : defaultdict(list))
     while len(modstack) > 0:
         mod = modstack.pop()
@@ -85,7 +85,7 @@ def cmd_scan(module:Path, pipeline_root:Path, output:Path, recurse:bool, execute
         if recurse:
             for m in filter(lambda x : x.is_dir(), mod.module_path.glob("[!#]*")):
                 #print(m)
-                modstack.append(BaseModule.resolve_module_by_path(m))
+                modstack.append(BaseModule.module_lazy_loader(m, source_space, verbose))
 
     if output is None:
         f = sys.stderr
