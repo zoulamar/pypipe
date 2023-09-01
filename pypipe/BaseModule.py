@@ -84,13 +84,13 @@ class BaseModule(ABC):
         assert path.is_dir(), f"The pypipe system requires modules to be directories whereas given {path} is not."
 
         pymodule_name:str = path.stem
-        print(f"module_lazy_loader: Module path: {path}")
-        print(f"module_lazy_loader: Module name: {pymodule_name}")
-        print(f"module_lazy_loader: Source space: {source_space}")
+        #print(f"module_lazy_loader: Module path: {path}")
+        #print(f"module_lazy_loader: Module name: {pymodule_name}")
+        #print(f"module_lazy_loader: Source space: {source_space}")
 
         # Perform caching.
         if path in BaseModule.ACTIVE_MODULE_REGISTRY:
-            print(f"module_lazy_loader: Using cached module.")
+            #print(f"module_lazy_loader: Using cached module.")
             return BaseModule.ACTIVE_MODULE_REGISTRY[path]
 
         # Here the lookup for sources will happen.
@@ -115,24 +115,24 @@ class BaseModule(ABC):
                     sys.path.append(str(source_space.resolve()))
 
         assert pysrc is not None, "module_lazy_loader: Source file could not be resolved."
-        print(f"module_lazy_loader: Resulting python module to be loaded {pysrc}")
+        #print(f"module_lazy_loader: Resulting python module to be loaded {pysrc}")
 
         pysrc = pysrc.relative_to(Path(os.getcwd()))
-        print(f"module_lazy_loader: Relative path {pysrc}")
+        #print(f"module_lazy_loader: Relative path {pysrc}")
 
         pymodspec = str(pysrc.stem).replace("/", ".")
-        print(f"module_lazy_loader: Pymodspec {pymodspec}")
+        #print(f"module_lazy_loader: Pymodspec {pymodspec}")
 
         pymod = importlib.import_module(pymodspec)
-        print(f"module_lazy_loader: Imported module {pymod}")
+        #print(f"module_lazy_loader: Imported module {pymod}")
 
         cls = getattr(pymod, pymodule_name)
-        print(f"module_lazy_loader: Module type {cls}")
+        #print(f"module_lazy_loader: Module type {cls}")
 
         assert callable(cls), f"The class {cls} from module {pymod} is not callable. Is it not still abstract?"
         assert issubclass(cls, BaseModule)
         instance = cls(path)
-        print(f"module_lazy_loader: Fresh instance {cls}")
+        #print(f"module_lazy_loader: Fresh instance {instance}")
         BaseModule.ACTIVE_MODULE_REGISTRY[path] = instance
         return instance
 
@@ -150,7 +150,7 @@ class BaseModule(ABC):
 
         # Always load a parent module. I.e., recursively load whole Pipeline's fork and determine a cleanness. Use a global Module Registry not to have duplicate Module folders.
         if not self.is_root_module:
-            self.parent_module = BaseModule.resolve_module_by_path(self.module_path.parent)
+            self.parent_module = BaseModule.module_lazy_loader(self.module_path.parent)
         else:
             self.parent_module = None
 
@@ -168,13 +168,13 @@ class BaseModule(ABC):
     def __repr__(self):
         return f"Module {type(self)} at {self.module_path}"# with config: \n{self.config}"
 
-    def find_parent_module(self, what:str) -> Union["BaseModule",None]:
-        """ Returns parent module of given name. """
+    def find_ancestor_module(self, what:str) -> Union["BaseModule",None]:
+        """ Returns parent module of given name or label. """
         if self.module_path.name == what or self.module_path.suffix == what:
             return self
         if self.parent_module is None:
             return None
-        return self.parent_module.find_parent_module(what)
+        return self.parent_module.find_ancestor_module(what)
 
     @final
     def enumerate_pipeline(self) -> List["BaseModule"]:
@@ -189,4 +189,3 @@ class BaseModule(ABC):
 
     def codename(self):
         return self.module_path.name
-
