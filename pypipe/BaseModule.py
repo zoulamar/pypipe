@@ -15,6 +15,9 @@ class BaseModule(ABC):
     The module dwells at a unique directory where it stores its computational by-products and configurations.
     A Module provides a set of named computational targets (instances of `GenericDataType`) which then form a target dependency tree.
     By convention, the targets dwell in the module's directory to facilitate unambiguous namespacing.
+
+    Note that the "targets" realize the build system.
+    This modular system serves as a tool for meaningful management of the targets.
     """
 
     ACTIVE_MODULE_REGISTRY:Dict[Path,"BaseModule"] = {}
@@ -22,7 +25,7 @@ class BaseModule(ABC):
 
     @final
     @staticmethod
-    def resolve_module_by_spec(spec:Path, root:Path, source_space:Path) -> "BaseModule":
+    def resolve_module_by_spec(spec:Path, root:Path, source_space:Path, verbose:bool=False) -> "BaseModule":
         """ Translates some module specificator pattern into absolute module path.
 
         `spec`: Specification of which particular model to use. If starts with "/", then correct full path from `root` expected. If no slashes present, find by name or label.
@@ -31,11 +34,11 @@ class BaseModule(ABC):
 
         # E.g., the root is pwd and I want to load it.
         if Path(spec) == root:
-            return BaseModule.module_lazy_loader(root, source_space)
+            return BaseModule.module_lazy_loader(root, source_space, verbose)
 
         # First try whether the specification matches some existing directory. If so, no other hard work needs to be done.
         if (root / spec).is_dir():
-            return BaseModule.module_lazy_loader(root / spec, source_space)
+            return BaseModule.module_lazy_loader(root / spec, source_space, verbose)
 
         raise NotImplementedError("The following logic was working, but I deem it messy. Hopefully I won't need to see it again soon.")
 
@@ -72,19 +75,20 @@ class BaseModule(ABC):
 
     @final
     @staticmethod
-    def module_lazy_loader(path:Path, source_space:Union[Path,None] = None) -> "BaseModule":
+    def module_lazy_loader(path:Path, source_space:Path, verbose=False) -> "BaseModule":
         """ Get a module at given path efficiently without duplicate instances. """
 
         assert path.is_dir(), f"The pypipe system requires modules to be directories whereas given {path} is not."
 
         pymodule_name:str = path.stem
-        #print(f"module_lazy_loader: Module path: {path}")
-        #print(f"module_lazy_loader: Module name: {pymodule_name}")
-        #print(f"module_lazy_loader: Source space: {source_space}")
+        if verbose:
+            print(f"module_lazy_loader: Module path: {path}")
+            print(f"module_lazy_loader: Module name: {pymodule_name}")
+            print(f"module_lazy_loader: Source space: {source_space}")
 
         # Perform caching.
         if path in BaseModule.ACTIVE_MODULE_REGISTRY:
-            #print(f"module_lazy_loader: Using cached module.")
+            if verbose: print(f"module_lazy_loader: Using cached module.")
             return BaseModule.ACTIVE_MODULE_REGISTRY[path]
 
         # Here the lookup for sources will happen.
@@ -92,48 +96,50 @@ class BaseModule(ABC):
         for ending in (pymodule_name + '.py', 'source.py', 'src.py'):
             if pysrc is not None:
                 break
-            #print(f"module_lazy_loader: Probe {path/ending}")
+            if verbose: print(f"module_lazy_loader: Probe {path/ending}")
             if (path / ending).is_file():
                 pysrc = path / (pymodule_name+'.py')
-                #print(f"module_lazy_loader: Found a source file in module's directory {pysrc}")
+                if verbose: print(f"module_lazy_loader: Found a source file in module's directory {pysrc}")
                 if not str(path.resolve()) in sys.path:
                     sys.path.append(str(path.resolve()))
         if pysrc is None and source_space is not None:
             results = sorted(source_space.glob(f"**/{pymodule_name}.py"))
-            #print(f"module_lazy_loader: Probe {pformat(results)}")
+            if verbose: print(f"module_lazy_loader: Probe {pformat(results)}")
             if len(results) > 0:
                 selected_result = results[0]
-                #print(f"module_lazy_loader: Found a source file in source space {selected_result}")
+                if verbose: print(f"module_lazy_loader: Found a source file in source space {selected_result}")
                 pysrc = selected_result
                 if not str(source_space.resolve()) in sys.path:
                     sys.path.append(str(source_space.resolve()))
 
         assert pysrc is not None, "module_lazy_loader: Source file could not be resolved."
-        #print(f"module_lazy_loader: Resulting python module to be loaded {pysrc}")
+        if verbose: print(f"module_lazy_loader: Resulting python module to be loaded {pysrc}")
 
         pysrc = pysrc.relative_to(Path(os.getcwd()))
-        #print(f"module_lazy_loader: Relative path {pysrc}")
+        if verbose: print(f"module_lazy_loader: Relative path {pysrc}")
 
         pymodspec = str(pysrc.stem).replace("/", ".")
-        #print(f"module_lazy_loader: Pymodspec {pymodspec}")
+        if verbose: print(f"module_lazy_loader: Pymodspec {pymodspec}")
 
-        pymod = importlib.import_module(pymodspec)
-        #print(f"module_lazy_loader: Imported module {pymod}")
+        try:
+            pymod = importlib.import_module(pymodspec)
+        except ModuleNotFoundError:
+            print("The module could not be imported. Either the passed directory is not a Module or the Module source is not in Python path.")
+            raise
+        if verbose: print(f"module_lazy_loader: Imported module {pymod}")
 
         cls = getattr(pymod, pymodule_name)
-        #print(f"module_lazy_loader: Module type {cls}")
+        if verbose: print(f"module_lazy_loader: Module type {cls}")
 
         assert callable(cls), f"The class {cls} from module {pymod} is not callable. Is it not still abstract?"
         assert issubclass(cls, BaseModule)
-        instance = cls(path)
-        #print(f"module_lazy_loader: Fresh instance {instance}")
+        instance = cls(path, source_space, verbose)
+        if verbose: print(f"module_lazy_loader: Fresh instance {instance}")
         BaseModule.ACTIVE_MODULE_REGISTRY[path] = instance
         return instance
 
-    def __init__(self, module_path:Path) -> None:
+    def __init__(self, module_path:Path, source_space:Path, verbose:bool, is_root_module:bool = False) -> None:
         """ The task now: Prepare the module for a computation. Instantiate Parent Module. Register all output files, either currently available or to-be-computed-yet. Perform sanity checks. """
-        if not hasattr(self, "is_root_module"):
-            self.is_root_module = False
         super().__init__()
 
         # Is the module valid, at least basically? Aint it duplicate?
@@ -141,15 +147,16 @@ class BaseModule(ABC):
         assert module_path.name.split(".")[0] if "." in module_path.name else module_path.name == self.__class__.__name__
         assert module_path not in BaseModule.ACTIVE_MODULE_REGISTRY, "Trying to instantiate a duplicate Module. Use BaseModule.ACTIVE_MODULE_REGISTRY[path_to_module] instead of creating a new one."
         self.module_path = module_path
+        """ A directory containing this module's targets. """
 
-        # Always load a parent module. I.e., recursively load whole Pipeline's fork and determine a cleanness. Use a global Module Registry not to have duplicate Module folders.
-        if not self.is_root_module:
-            self.parent_module = BaseModule.module_lazy_loader(self.module_path.parent)
-        else:
-            self.parent_module = None
+        self.parent_module:Union[BaseModule,None] = None if is_root_module else BaseModule.module_lazy_loader(self.module_path.parent, source_space, verbose)
+        """ Previous computational stage. None iff this is the root node.  """
 
-        # Now find out all provided outputs in order to perhaps compute one later.
         self.targets:Dict[str,GenericDataType] = self.declare_targets()
+        """ All declared targets. Anyone can reference to them, use them as dependencies or make them by calling their make method. """
+
+        self.verbose:bool = verbose
+        """ Allows some verbose logging if desired. """
 
     @abstractmethod
     def declare_targets(self)->Dict[str,"GenericDataType"]:
@@ -162,14 +169,16 @@ class BaseModule(ABC):
     def __repr__(self) -> str:
         return f"Module {type(self)} at {self.module_path}"# with config: \n{self.config}"
 
+    def get_parent(self) -> "BaseModule":
+        if self.parent_module is None:
+            raise ValueError
+        return self.parent_module
+
     def get_root_module(self) -> "BaseModule":
         inspected = self
-        while inspected is not None:
-            if inspected.is_root_module:
-                return inspected
-            else:
-                inspected = inspected.parent_module
-        raise ValueError("This should never happen.")
+        while inspected.parent_module is not None:
+            inspected = inspected.parent_module
+        return inspected
 
     def find_ancestor_module(self, what:str) -> Union["BaseModule",None]:
         """ Returns parent module of given name or label. """
