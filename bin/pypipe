@@ -94,7 +94,7 @@ def cmd_scan(module:Path, pipeline_root:Path, output:Path, recurse:bool, verbose
     f.write(f"# START OF GENERATED SCRIPT ({datetime.now()})\n")
     for depth in sorted(list(per_depth_per_nproc.keys())):
         for nproc in per_depth_per_nproc[depth]:
-            parallel_command = "parallel --bar --jobs " + nproc + " --colsep ' ' \"./ctl.py make {}\""
+            parallel_command = "parallel --bar --jobs " + nproc + " --colsep ' ' \"pypipe make {}\""
             f.write(f"echo 'Computing computation depth {depth}.'\n")
             f.write(parallel_command + " <<InplaceGeneratedJobList\n")
             f.write("\n".join(per_depth_per_nproc[depth][nproc]))

@@ -4,7 +4,7 @@ from abc import ABC, abstractmethod
 import importlib, os, sys
 from pathlib import Path
 from pprint import pformat
-from typing import Dict, List, Union, final
+from typing import Dict, List, Union, final, Type, Iterator, Tuple
 from . import GenericDataType
 
 class BaseModule(ABC):
@@ -158,6 +158,11 @@ class BaseModule(ABC):
         self.verbose:bool = verbose
         """ Allows some verbose logging if desired. """
 
+        """ Updates a .gitignore file with all targets. """
+        with open(self.module_path / ".gitignore", "w") as f:
+            for t in self.targets.values():
+                f.write(str(t.path.relative_to(self.module_path)) + "\n")
+
     @abstractmethod
     def declare_targets(self)->Dict[str,"GenericDataType"]:
         """ Every module must be able to declare what outputs it provides.
@@ -201,3 +206,10 @@ class BaseModule(ABC):
 
     def codename(self):
         return self.module_path.name
+
+    @final
+    def targets_by_type(self, t:Type)->Iterator[Tuple[str, "GenericDataType"]]:
+        for n, v in self.targets.items():
+            if isinstance(v, t):
+                yield n,v
+

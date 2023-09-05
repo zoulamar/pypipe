@@ -47,7 +47,7 @@ class GenericDataType(ABC):
         This might be useful when the Pipeline is already trained and used only for computing the predictions.
         """
 
-        assert where.resolve() not in GenericDataType.USED_PATH_REGISTRY, f"Module at path {where} already present:\n{pformat(GenericDataType.USED_PATH_REGISTRY)}"
+        assert where.resolve() not in GenericDataType.USED_PATH_REGISTRY, f"Target at path {where} already open:\n{pformat(GenericDataType.USED_PATH_REGISTRY)}"
         GenericDataType.USED_PATH_REGISTRY[where.resolve()] = self
 
         self.path:Path = where
@@ -85,17 +85,15 @@ class GenericDataType(ABC):
         2. When some runtime value is provided with `self.set()`. This typically happens during making of this target or during runtime operating, surrogating original file-based data.
         """
 
-    @abstractmethod
     def load(self) -> None:
         """ This has to recover value stored in `self.path` to `self.value`. """
-        pass
+        raise NotImplementedError
 
-    @abstractmethod
     def save(self) -> None:
         """ Takes the data in `self.value` and stores it into `self.path`. """
-        pass
+        raise NotImplementedError
 
-    def sanity_checker(self, value) -> None:
+    def sanity_checker(self, _) -> None:
         """ Override this to implement type checks or other goodies. """
         pass
 
@@ -103,6 +101,7 @@ class GenericDataType(ABC):
     def set(self, value, auto_save_override:Union[bool,None]=None) -> None:
         """ Given a value, sets `self.value` with possible data integrity or type checks. Does not care where the data came from. """
         self.sanity_checker(value)
+        self.value = value
         save = auto_save_override if auto_save_override is not None else GenericDataType.AUTO_SAVING_TO_FILE
         if save:
             print(f"Auto saving {self} to FILE!", file=sys.stderr)
@@ -118,7 +117,7 @@ class GenericDataType(ABC):
         return self.value
 
     @final
-    def make(self, recurse=True, force=False):
+    def make(self, recurse=True, force=False) -> None:
         """ A generic tool which backtracks all source targets and makes them if not ready.
 
         `recurse`: Check up-to-dateness recursively. If False, this target takes its prequisities even tough they may not be up-to-date.
@@ -152,9 +151,9 @@ class GenericDataType(ABC):
         time_min = int(duration / 60)
         print(f"{self}: Made in {time_min}min {time_sec:.2}s.", file=sys.stderr)
 
-    @abstractmethod
-    def str_detailed(self):
+    def str_detailed(self) -> str:
         """ Some sort of detailed description. """
+        return f"A generic data type at {self.path}"
 
     @final
     def mark_as_touched(self):
@@ -193,3 +192,5 @@ class GenericDataType(ABC):
             if self.mtime() < preq.mtime():
                 return False # If any of prequisite is newer than this target, I am out of date.
         return self.path.exists() # If all prequisities are OK, I might not be.
+
+
