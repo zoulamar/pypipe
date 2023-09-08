@@ -18,6 +18,10 @@ class BaseModule(ABC):
 
     Note that the "targets" realize the build system.
     This modular system serves as a tool for meaningful management of the targets.
+
+    By convention, there are two types of targets, the primary targets and other targets.
+    The primary targets do not have colon (:) in their name.
+    Other targets use the colon as long as they are related to the primary target.
     """
 
     ACTIVE_MODULE_REGISTRY:Dict[Path,"BaseModule"] = {}
@@ -213,3 +217,10 @@ class BaseModule(ABC):
             if isinstance(v, t):
                 yield n,v
 
+    def targets_primary_names(self)->Iterator[str]:
+        primary_names = set()
+        for name in self.targets.keys():
+            name_striped:str = name.split(":")[0]
+            if name_striped not in primary_names:
+                primary_names.add(name_striped)
+                yield name_striped

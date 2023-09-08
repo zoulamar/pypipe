@@ -41,8 +41,10 @@ def cmd_show(module:Path, pipeline_root:Path, source_space:Path, target:Union[st
         print(f" {pipeline_cnt:2}: {type(mod_shown).__name__} {attr('dim')}({mod_shown.module_path.resolve()}){attr('reset')}")
 
     print(f"{attr('underlined')}Module's available targets:{attr('reset')}")
+    primaries = mod.targets_primary_names()
     for n, t in mod.targets.items():
-        print(f"{attr('bold')}{n:<10}{attr('reset')} {t}")
+        primary_decoration = "* " if n in primaries else "  "
+        print(f"{primary_decoration}{attr('bold')}{n:<10}{attr('reset')} {t}")
     if target is not None:
         t = mod.targets[target]
         print(f"{attr('underlined')}Selected target:{attr('reset')}")
