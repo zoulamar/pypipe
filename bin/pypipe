@@ -55,7 +55,7 @@ def cmd_show(module:Path, pipeline_root:Path, source_space:Path, target:Union[st
         #print(t.str_detailed())
     """ """
 
-def cmd_scan(module:Path, pipeline_root:Path, output:Path, recurse:bool, verbose:bool, source_space:Path, execute:bool, *args, **kwargs):
+def cmd_scan(module:Path, pipeline_root:Path, output:Path, recurse:bool, force:bool, verbose:bool, source_space:Path, execute:bool, *args, **kwargs):
     """ Produces an executable bash script which correctly computes given part of Pipeline.
 
     TODO: Make each module compute its resource requirements such that a number of running processes can be dynamically managed not toexceed RAM.
@@ -81,13 +81,14 @@ def cmd_scan(module:Path, pipeline_root:Path, output:Path, recurse:bool, verbose
         print(f"Examine module {mod.__repr__()}")
         for n, t, d in sorted([(n, t, t.depth) for (n , t) in mod.targets.items()]):
             print(f" - {t}")
-            if not t.is_up_to_date():
+            if force or not t.is_up_to_date():
                 t.mark_as_touched()
-                per_depth_per_nproc[d][t.parallelizable].append(f"{mod.module_path} -t {n}")
+                per_depth_per_nproc[d][t.parallelizable].append(f"{str(mod.module_path)} -t {n}" + (" -f" if force else ""))
         if recurse:
-            for m in filter(lambda x : x.is_dir(), mod.module_path.glob("[!#]*")):
+            for m in filter(lambda x : x.is_dir(), mod.module_path.glob("[!#_]*")):
                 #print(m)
                 modstack.append(BaseModule.module_lazy_loader(m, source_space, verbose))
+    #pprint(per_depth_per_nproc)
 
     if output is None:
         f = sys.stderr
@@ -150,6 +151,7 @@ argp_scan = argps.add_parser(name="scan", description="Scans the pipeline and pr
 argp_scan.add_argument("module", type=Path, help="Specify a directory relative to `--pipeline-root` or an unique label which defines module to compute.")
 argp_scan.add_argument("--output", "-o", type=Path, default=None, help="An output to be created. (Use `show` command to see available outputs.)")
 argp_scan.add_argument("--recurse", "-r", action="store_true", help="Recurse.")
+argp_scan.add_argument("--force", "-f", action="store_true", help="Recurse.")
 argp_scan.add_argument("--execute", "-e", action="store_true", help="Pass the commands directly to bash launched as subprocess.")
 argp_scan.set_defaults(func=cmd_scan)
 

@@ -116,7 +116,7 @@ class BaseModule(ABC):
                 if not str(source_space.resolve()) in sys.path:
                     sys.path.append(str(source_space.resolve()))
 
-        assert pysrc is not None, "module_lazy_loader: Source file could not be resolved."
+        assert pysrc is not None, f"module_lazy_loader: Source file for path {path} could not be resolved."
         if verbose: print(f"module_lazy_loader: Resulting python module to be loaded {pysrc}")
 
         pysrc = pysrc.relative_to(Path(os.getcwd()))
@@ -153,6 +153,9 @@ class BaseModule(ABC):
         self.module_path = module_path
         """ A directory containing this module's targets. """
 
+        self.source_space:Path = source_space
+        """ A source space for module lazy loader. """
+
         self.parent_module:Union[BaseModule,None] = None if is_root_module else BaseModule.module_lazy_loader(self.module_path.parent, source_space, verbose)
         """ Previous computational stage. None iff this is the root node.  """
 
@@ -166,6 +169,12 @@ class BaseModule(ABC):
         with open(self.module_path / ".gitignore", "w") as f:
             for t in self.targets.values():
                 f.write(str(t.path.relative_to(self.module_path)) + "\n")
+            for t in self.extra_gitignore():
+                f.write(t + "\n")
+
+    def extra_gitignore(self) -> List[str]:
+        """ Override this to declare extra patterns to be ignored by Git. """
+        return []
 
     @abstractmethod
     def declare_targets(self)->Dict[str,"GenericDataType"]:
