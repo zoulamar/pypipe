@@ -1,7 +1,6 @@
 #!/usr/bin/echo Script not meant as executable:
 
-# Filename:  std_modules.py
-# Date:      2022-11
+# Filename:  std_datatypes.py
 # Author:    Ing. Martin Zoula (zoulamar@fel.cvut.cz)
 
 from pypipe import GenericDataType

@@ -113,6 +113,30 @@ def cmd_scan(module:Path, pipeline_root:Path, output:Path, recurse:bool, force:b
         f.close()
         os.chmod(output, 0o774)
 
+def cmd_clean(module:Path, target:str|None, pipeline_root:Path, source_space:Path, recurse:bool, force:bool=False, *args, **kwargs) -> None:
+    """ Evaluates one particular target piece of data.
+
+    `what`: One particular piece of output data, has to be in list of Module's declared outputs.
+    """
+    mod = BaseModule.resolve_module_by_spec(module, pipeline_root, source_space)
+
+    if force:
+        raise NotImplementedError("TBD: This should delete anything except files with no-op or rather expect made targets.")
+
+    if recurse:
+        raise NotImplementedError("TBD")
+
+    if target is None:
+        for t_name, t in mod.targets.items():
+            if t.path.exists():
+                print(f"rm {t.path}")
+                os.remove(t.path)
+    else:
+        t = mod.targets[target]
+        if t.path.exists():
+            print(f"rm {t.path}")
+            os.remove(t.path)
+
 def cmd_report(pipeline_root:Path, *args, **kwargs):
     """ Just dumps all reports... """
     print("Root: ", pipeline_root)
@@ -148,6 +172,12 @@ argp_make.add_argument("--target", "-t", type=str, required=True, help="An outpu
 argp_make.add_argument("--recurse", "-r", action="store_true", help="Make recursively all prequisite targets before doing this target.")
 argp_make.add_argument("--force", "-f", action="store_true", help="Force recomputation.")
 argp_make.set_defaults(func=cmd_make)
+
+argp_make = argps.add_parser(name="clean", description="Removes a target or all targets of a modlue")
+argp_make.add_argument("module", type=Path, help="Specify a directory relative to `--pipeline-root` which defines module to compute.")
+argp_make.add_argument("--target", "-t", type=str, default=None, help="An output to be deleted. (Use `show` command to see available outputs.)")
+argp_make.add_argument("--recurse", "-r", action="store_true", help="Make recursively all prequisite targets before doing this target.")
+argp_make.set_defaults(func=cmd_clean)
 
 # Scan subcommand
 argp_scan = argps.add_parser(name="scan", description="Scans the pipeline and prepares a parallelized shell script which computes what's out of date.")

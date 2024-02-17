@@ -1,5 +1,8 @@
 #!/usr/bin/echo Script not meant as executable:
 
+# Filename:  __init__.py
+# Author:    Ing. Martin Zoula (zoulamar@fel.cvut.cz)
+
 import sys
 from abc import ABC, abstractmethod
 import os, time
@@ -162,7 +165,7 @@ class BaseModule(ABC):
         self.source_space:Path = source_space
         """ A source space for module lazy loader. """
 
-        self.parent_module:Union[BaseModule,None] = None if is_root_module else BaseModule.module_lazy_loader(self.module_path.parent, source_space, verbose)
+        self.parent_module:BaseModule|None = None if is_root_module else BaseModule.module_lazy_loader(self.module_path.parent, source_space, verbose)
         """ Previous computational stage. None iff this is the root node.  """
 
         self.targets:Dict[str,GenericDataType] = self.declare_targets()
