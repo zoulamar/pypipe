@@ -118,7 +118,7 @@ class BaseModule(ABC):
             if len(results) > 0:
                 selected_result = results[0]
                 if verbose: print(f"module_lazy_loader: Found a source file in source space {selected_result}")
-                pysrc = selected_result
+                pysrc = selected_result.resolve()
                 if not str(source_space.resolve()) in sys.path:
                     sys.path.append(str(source_space.resolve()))
 

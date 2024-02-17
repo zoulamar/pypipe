@@ -36,25 +36,25 @@ def cmd_make(module:Path, target:str, pipeline_root:Path, source_space:Path, rec
 
 def cmd_show(module:Path, pipeline_root:Path, source_space:Path, target:Union[str,None]=None, verbose=False, *args, **kwargs):
     mod = BaseModule.resolve_module_by_spec(module, pipeline_root, source_space, verbose=verbose)
-    print(f"{attr('underlined')}Module to be shown:{attr('reset')}:")
+    print(f"{attr('underline')}Module to be shown:{attr('reset')}:")
     print(mod)
-    print(f"{attr('underlined')}Module's pipeline:{attr('reset')}:")
+    print(f"{attr('underline')}Module's pipeline:{attr('reset')}:")
     mod_list = mod.enumerate_pipeline()
     for pipeline_cnt, mod_shown in enumerate(mod_list):
         print(f" {pipeline_cnt:2}: {type(mod_shown).__name__} {attr('dim')}({mod_shown.module_path.resolve()}){attr('reset')}")
 
-    print(f"{attr('underlined')}Module's available targets:{attr('reset')}")
+    print(f"{attr('underline')}Module's available targets:{attr('reset')}")
     primaries = mod.targets_primary_names()
     for n, t in mod.targets.items():
         primary_decoration = "* " if n in primaries else "  "
         print(f"{primary_decoration}{attr('bold')}{n:<10}{attr('reset')} {t}")
     if target is not None:
         t = mod.targets[target]
-        print(f"{attr('underlined')}Selected target:{attr('reset')}")
+        print(f"{attr('underline')}Selected target:{attr('reset')}")
         print(t)
-        print(f"{attr('underlined')}Antedescent Targets:{attr('reset')}")
+        print(f"{attr('underline')}Antedescent Targets:{attr('reset')}")
         pprint(t.depends)
-        #print(f"{attr('underlined')}Selected target detail:{attr('reset')}")
+        #print(f"{attr('underline')}Selected target detail:{attr('reset')}")
         #print(t.str_detailed())
     """ """
 
@@ -130,7 +130,8 @@ def cmd_not_implemented_yet(*_, **__):
 # Load arguments
 argp = argparse.ArgumentParser(description="Pipeline Management and Execution Tool. This script can be used to consistently compute whatewer's needed.")
 argp.add_argument("--verbose", "-v", action="store_true")
-argp.add_argument("--config-file", "-c", default=Path.cwd() / "pypipe.yaml", type=Path, help="File which specifies 1. the pipeline root module/directory. 2. the directory with collection of computational modules.")
+argp.add_argument("--source-space", "-s", type=Path, default=Path.cwd())
+argp.add_argument("--pipeline-root", "-r", type=Path, default=Path.cwd())
 argp.set_defaults(func=cmd_none)
 argps = argp.add_subparsers(description='')
 
@@ -167,14 +168,25 @@ argp_report.set_defaults(func=cmd_report)
 argp_tree = argps.add_parser(name="tree", description="Prints the pipeline tree.")
 argp_report.set_defaults(func=cmd_not_implemented_yet)
 
-args = argp.parse_args()
+# Before parsing, see if there is a config file and try to inject it into the argv.
+#print("This is pypipe.", end="")
+argv = sys.argv[1:]
+for try_name in (".pypipe.yaml", "pypipe.yaml"):
+    if Path(try_name).exists():
+        #print(f" Loading config file {try_name}.", end="")
+        with open(try_name, "r") as f:
+            inject = safe_load(f)
+        for key, value in inject.items():
+            assert isinstance(value, str)
+            argv.insert(0, value)
+            argv.insert(0, "--" + key)
+        break
 
-values = {
-        "pipeline_root" : Path(os.getcwd()),
-        "source_space" : Path(os.getcwd()),
-}
-with open(args.config_file, "r") as f:
-    values.update(safe_load(f))
-values.update(args.__dict__)
+# Parse the args
+args = argp.parse_args(argv)
+values = args.__dict__
+if args.verbose:
+    print("Configuration reads as follows.")
+    pprint(values)
 
 args.func(**values)

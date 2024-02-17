@@ -46,3 +46,4 @@ class NpzDataType(GenericDataType):
 
     def plot(self, into):
         raise NotImplementedError()
+
