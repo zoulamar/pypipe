@@ -2,6 +2,8 @@
 
 """ A command line tool for launching and manipulating PyPiPe evaluations. Launch with --help for more details. """
 
+assert __name__ == "__main__"
+
 import argparse
 from datetime import datetime
 from collections import defaultdict
@@ -11,6 +13,7 @@ from pprint import pprint
 from colored import attr
 import os, sys
 from pypipe import BaseModule
+from yaml import safe_load
 
 this_file = Path(__file__)
 
@@ -127,8 +130,7 @@ def cmd_not_implemented_yet(*_, **__):
 # Load arguments
 argp = argparse.ArgumentParser(description="Pipeline Management and Execution Tool. This script can be used to consistently compute whatewer's needed.")
 argp.add_argument("--verbose", "-v", action="store_true")
-argp.add_argument("--pipeline-root", "-R", default=Path(os.getcwd()), type=Path, help="A directory containing the defined (or to-be-defined) computational pipeline. User modules and datatypes are sought in the root or in root/src or in module path's directory.")
-argp.add_argument("--source-space", "-S", default=Path(os.getcwd()), type=Path, help="A directory where definitions of computational modules and user data types dwell. ")
+argp.add_argument("--config-file", "-c", default=Path.cwd() / "pypipe.yaml", type=Path, help="File which specifies 1. the pipeline root module/directory. 2. the directory with collection of computational modules.")
 argp.set_defaults(func=cmd_none)
 argps = argp.add_subparsers(description='')
 
@@ -167,4 +169,12 @@ argp_report.set_defaults(func=cmd_not_implemented_yet)
 
 args = argp.parse_args()
 
-args.func(**args.__dict__)
+values = {
+        "pipeline_root" : Path(os.getcwd()),
+        "source_space" : Path(os.getcwd()),
+}
+with open(args.config_file, "r") as f:
+    values.update(safe_load(f))
+values.update(args.__dict__)
+
+args.func(**values)
