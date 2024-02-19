@@ -12,17 +12,18 @@ from pathlib import Path
 from pprint import pprint
 from colored import attr
 import os, sys
+import colored
 from pypipe import BaseModule
 from yaml import safe_load
 
 this_file = Path(__file__)
 
-def cmd_make(module:Path, target:str, pipeline_root:Path, source_space:Path, recurse:bool, force:bool, *args, **kwargs) -> None:
+def cmd_make(module:Path, target:str, pipeline_root:Path, source_space:Path, recurse:bool, force:bool, verbose:bool, *args, **kwargs) -> None:
     """ Evaluates one particular target piece of data.
 
     `what`: One particular piece of output data, has to be in list of Module's declared outputs.
     """
-    mod = BaseModule.resolve_module_by_spec(module, pipeline_root, source_space)
+    mod = BaseModule.resolve_module_by_spec(module, pipeline_root, source_space, verbose=verbose)
     try:
         t = mod.targets[target]
     except KeyError:
@@ -151,6 +152,47 @@ def cmd_none(*_, **__):
 def cmd_not_implemented_yet(*_, **__):
     raise NotImplementedError("Not implemented yet...")
 
+def cmd_tree(module:Path|None, target:str|None, pipeline_root:Path, source_space:Path, output:str|None, verbose:bool, *args, **kwargs):
+
+    def print_module(m:BaseModule, l:int):
+        sep = " |" * l
+        count_up_to_date = 0
+        count_out_of_date = 0
+        t_list = []
+        for n, t in m.targets.items():
+            if t.is_up_to_date():
+                count_up_to_date += 1
+                color = colored.Fore.green
+            else:
+                count_out_of_date += 1
+                color = colored.Fore.red
+            t_list.append(f"{color}{n}{colored.Style.reset}")
+
+        print(f"{sep}module {m.module_path.name} with {len(m.targets)} targets ({colored.Fore.green}{count_up_to_date}{colored.Style.reset} up/{colored.Fore.red}{count_out_of_date} down{colored.Style.reset}) [ {' | '.join(t_list)} ]")
+
+        for d in filter(lambda x : x.is_dir() and x.name not in (".", ".."), m.module_path.glob("*")):
+            try:
+                mod = BaseModule.resolve_module_by_spec(d, pipeline_root, source_space, verbose=verbose)
+                print_module(mod, l+1)
+            except:
+                continue
+
+    if output is not None:
+        raise NotImplementedError("TODO: Graphviz.")
+    if module is None and target is None:
+        for d in filter(lambda x : x.is_dir() and x.name not in (".", ".."), pipeline_root.glob("*")):
+            try:
+                mod = BaseModule.resolve_module_by_spec(d, pipeline_root, source_space, verbose=verbose)
+                print_module(mod, 0)
+            except:
+                continue
+    elif module is not None and target is None:
+        raise NotImplementedError("tbd")
+    elif module is not None and target is not None:
+        raise NotImplementedError("tbd")
+    else:
+        raise ValueError("Tree command needs a module to operate with, you've given only a target.")
+
 # Load arguments
 argp = argparse.ArgumentParser(description="Pipeline Management and Execution Tool. This script can be used to consistently compute whatewer's needed.")
 argp.add_argument("--verbose", "-v", action="store_true")
@@ -173,11 +215,12 @@ argp_make.add_argument("--recurse", "-r", action="store_true", help="Make recurs
 argp_make.add_argument("--force", "-f", action="store_true", help="Force recomputation.")
 argp_make.set_defaults(func=cmd_make)
 
-argp_make = argps.add_parser(name="clean", description="Removes a target or all targets of a modlue")
-argp_make.add_argument("module", type=Path, help="Specify a directory relative to `--pipeline-root` which defines module to compute.")
-argp_make.add_argument("--target", "-t", type=str, default=None, help="An output to be deleted. (Use `show` command to see available outputs.)")
-argp_make.add_argument("--recurse", "-r", action="store_true", help="Make recursively all prequisite targets before doing this target.")
-argp_make.set_defaults(func=cmd_clean)
+# Clean subcommand
+argp_clean = argps.add_parser(name="clean", description="Removes a target or all targets of a modlue")
+argp_clean.add_argument("module", type=Path, help="Specify a directory relative to `--pipeline-root` which defines module to compute.")
+argp_clean.add_argument("--target", "-t", type=str, default=None, help="An output to be deleted. (Use `show` command to see available outputs.)")
+argp_clean.add_argument("--recurse", "-r", action="store_true", help="Make recursively all prequisite targets before doing this target.")
+argp_clean.set_defaults(func=cmd_clean)
 
 # Scan subcommand
 argp_scan = argps.add_parser(name="scan", description="Scans the pipeline and prepares a parallelized shell script which computes what's out of date.")
@@ -196,7 +239,10 @@ argp_report.set_defaults(func=cmd_report)
 
 # Tree subcommand
 argp_tree = argps.add_parser(name="tree", description="Prints the pipeline tree.")
-argp_report.set_defaults(func=cmd_not_implemented_yet)
+argp_tree.add_argument("--module", "-m", default=None, type=Path)
+argp_tree.add_argument("--target", "-t", default=None, type=str)
+argp_tree.add_argument("--output", "-o", default=None, type=str)
+argp_tree.set_defaults(func=cmd_tree)
 
 # Before parsing, see if there is a config file and try to inject it into the argv.
 #print("This is pypipe.", end="")

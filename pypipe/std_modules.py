@@ -8,6 +8,8 @@ from pathlib import Path
 from pypipe.std_datatypes import NpzDataType, YamlDataType
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
+from pypipe.sciplotrc import subplots, IEEE_COL_WIDTH
+import os
 
 class RootModule (BaseModule):
     """ Just a generic class which blocks further recursive submodule search. """
@@ -26,15 +28,22 @@ class Plot (BaseModule):
 
         # Understand npy files
         for t_lab, t_obj in GenericDataType.filteritems(self.parent_module.targets,NpzDataType):
-            ret[t_lab] = GenericDataType(self.module_path / t_obj.path.with_stem(".pdf").name, plot_npz, depends={"src":t_obj,"cfg":config_file})
+            ret[t_lab] = GenericDataType(self.module_path / t_obj.path.with_suffix(".pdf").name, Plot.npz, depends={"src":t_obj,"cfg":config_file})
 
         return ret
 
-def plot_npz(target:GenericDataType):
-    cfg = target.depends["cfg"].get()
-
-    with PdfPages(target.path) as pdf:
-        for data_name, data in target.depends["src"].get():
-            plt.plot(data)
-
-
+    @staticmethod
+    def npz(target:GenericDataType):
+        cfg = target.depends["cfg"].get()
+        src = target.depends["src"].get()
+        print(src)
+        try:
+            with PdfPages(target.path) as pdf:
+                for data_name, data in src.items():
+                    fig = plt.figure(figsize=(IEEE_COL_WIDTH, IEEE_COL_WIDTH*.8))
+                    plt.plot(data)
+                    pdf.savefig()
+                    plt.close()
+        except:
+            os.remove(target.path)
+            raise
