@@ -25,11 +25,11 @@ class NpzDataType(GenericDataType):
     """ Numpy-centric storage of several named arrays in a zip archive. """
     def load(self):
         self.value = dict(np.load(self.path, allow_pickle=True))
-        print(f"Loaded value {self.value} from {self.path}")
+        #print(f"Loaded value {self.value} from {self.path}")
 
     def save(self):
         assert self.value is not None
-        print(f"Saving value {self.value} to {self.path}")
+        #print(f"Saving value {self.value} to {self.path}")
         np.savez_compressed(self.path, **self.value)
 
     def str_detailed(self):

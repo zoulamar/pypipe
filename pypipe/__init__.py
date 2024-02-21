@@ -3,7 +3,6 @@
 # Filename:  __init__.py
 # Author:    Ing. Martin Zoula (zoulamar@fel.cvut.cz)
 
-import inspect
 import sys
 from abc import ABC, abstractmethod
 import os, time
@@ -16,9 +15,6 @@ import importlib, os, sys
 from pathlib import Path
 from pprint import pformat
 from typing import Dict, List, Union, final, Type, Iterator, Tuple
-
-from numpy import where
-from pypipe import GenericDataType
 
 class BaseModule(ABC):
     """ This class provides a convention of a meaningful organizing of the targets.
