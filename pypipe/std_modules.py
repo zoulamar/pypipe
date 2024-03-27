@@ -36,12 +36,29 @@ class Plot (BaseModule):
     def npz(target:GenericDataType):
         cfg = target.depends["cfg"].get()
         src = target.depends["src"].get()
-        print(src)
+
+        if "t" in src:
+            t = src["t"]
+            t = t - t[0]
+            del src["t"]
+        elif "time" in src:
+            t = src["time"]
+            t = t - t[0]
+            del src["time"]
+        else:
+            t = None
+
         try:
             with PdfPages(target.path) as pdf:
                 for data_name, data in src.items():
                     fig = plt.figure(figsize=(IEEE_COL_WIDTH, IEEE_COL_WIDTH*.8))
-                    plt.plot(data)
+                    if t is None:
+                        plt.plot(data)
+                        plt.xlabel("Sample [-]")
+                    else:
+                        plt.plot(t, data)
+                        plt.xlabel("Time [s]")
+                    plt.ylabel(data_name)
                     pdf.savefig()
                     plt.close()
         except:
