@@ -116,8 +116,6 @@ class BaseModule(ABC):
             if (path / ending).is_file():
                 pysrc = path / ending
                 if verbose: print(f"{sep}module_lazy_loader: Found a source file in module's directory {pysrc}")
-                if not str(path.resolve()) in sys.path:
-                    sys.path.append(str(path.resolve()))
                 break
         else:
             # If no ad-hoc modules in the directory itself, try project's source space.
@@ -128,8 +126,6 @@ class BaseModule(ABC):
                     selected_result = results[0]
                     if verbose: print(f"{sep}module_lazy_loader: Found a source file in source space {selected_result}")
                     pysrc = selected_result.resolve()
-                    if not str(source_space.resolve()) in sys.path:
-                        sys.path.append(str(source_space.resolve()))
 
             # If still nothing found, fallback to std. modulees.
             if pysrc is None:
@@ -154,8 +150,19 @@ class BaseModule(ABC):
             pysrc = pysrc.relative_to(Path(os.getcwd()))
             if verbose: print(f"{sep}module_lazy_loader: Relative path {pysrc}")
 
-            pymodspec = str(pysrc.stem).replace("/", ".")
+            pymodspec = str(pysrc.parent / pysrc.stem).replace("/", ".")
             if verbose: print(f"{sep}module_lazy_loader: Pymodspec {pymodspec}")
+
+            pysrc = pysrc.parent
+            while True:
+                path_to_add = str(pysrc.resolve())
+                if not path_to_add in sys.path:
+                    if verbose: print(f"{sep}module_lazy_loader: Adding {path_to_add} to PATH.")
+                    sys.path.append(path_to_add)
+                elif verbose: print(f"{sep}module_lazy_loader: {path_to_add} already in PATH.")
+                if pysrc.resolve() == Path.cwd():
+                    break
+                pysrc = pysrc.parent
 
             try:
                 pymod = importlib.import_module(pymodspec)
@@ -164,11 +171,16 @@ class BaseModule(ABC):
                 raise
             if verbose: print(f"{sep}module_lazy_loader: Imported module {pymod}")
 
-            cls = getattr(pymod, pymodule_name)
-            if verbose: print(f"{sep}module_lazy_loader: Module type {cls}")
-
-            assert callable(cls), f"The class {cls} from module {pymod} is not callable. Is it not still abstract?"
-            assert issubclass(cls, BaseModule)
+            candidate_names = (pymodule_name, "Module", "Main")
+            for candidate_name in candidate_names:
+                if hasattr(pymod, candidate_name):
+                    cls = getattr(pymod, candidate_name)
+                    if callable(cls) and issubclass(cls, BaseModule):
+                        if verbose: print(f"{sep}module_lazy_loader: Module type {cls}")
+                        break
+            else:
+                raise AttributeError(f"None of candidate_names {candidate_names} was found in the module {pymodule_name}")
+            if verbose: print(f"{sep}module_lazy_loader: Final class in the module: {cls}")
         else:
             assert cls is not None
 
@@ -205,6 +217,9 @@ class BaseModule(ABC):
         self.verbose:bool = verbose
         """ Allows some verbose logging if desired. """
 
+        self.make_gitignore()
+
+    def make_gitignore(self) -> None:
         """ Updates a .gitignore file with all targets. """
         with open(self.module_path / ".gitignore", "w") as f:
             for t in self.targets.values():
