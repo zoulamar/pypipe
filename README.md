@@ -16,3 +16,7 @@ Thus, one could be able to implement
 - cached files
 - built files
 
+Then, each file could have also a "deletor" script, which would, e.g.,
+- move it to trash
+- delete permanently (default)
+- archive it by some rule
