@@ -9,21 +9,22 @@ from datetime import datetime
 from collections import defaultdict
 from typing import Union
 from pathlib import Path
-from pprint import pprint
+from pprint import pformat, pprint
 from colored import attr
 import os, sys
 import colored
 from pypipe import BaseModule
+import pypipe
 from yaml import safe_load
 
 this_file = Path(__file__)
 
-def cmd_make(module:Path, target:str, pipeline_root:Path, source_space:Path, recurse:bool, force:bool, verbose:bool, *args, **kwargs) -> None:
+def cmd_make(module:Path, target:str, recurse:bool, force:bool) -> None:
     """ Evaluates one particular target piece of data.
 
     `what`: One particular piece of output data, has to be in list of Module's declared outputs.
     """
-    mod = BaseModule.resolve_module_by_spec(module, pipeline_root, source_space, verbose=verbose)
+    mod = BaseModule.module_lazy_loader(module)
     try:
         t = mod.targets[target]
     except KeyError:
@@ -35,8 +36,8 @@ def cmd_make(module:Path, target:str, pipeline_root:Path, source_space:Path, rec
 
     t.make(recurse=recurse, force=force)
 
-def cmd_show(module:Path, pipeline_root:Path, source_space:Path, target:Union[str,None]=None, verbose=False, *args, **kwargs):
-    mod = BaseModule.resolve_module_by_spec(module, pipeline_root, source_space, verbose=verbose)
+def cmd_show(module:Path, target:Union[str,None]=None):
+    mod = BaseModule.module_lazy_loader(module)
     print(f"{attr('underline')}Module to be shown:{attr('reset')}:")
     print(mod)
     print(f"{attr('underline')}Module's pipeline:{attr('reset')}:")
@@ -55,11 +56,10 @@ def cmd_show(module:Path, pipeline_root:Path, source_space:Path, target:Union[st
         print(t)
         print(f"{attr('underline')}Antedescent Targets:{attr('reset')}")
         pprint(t.depends)
-        #print(f"{attr('underline')}Selected target detail:{attr('reset')}")
-        #print(t.str_detailed())
-    """ """
+        print(f"{attr('underline')}Selected target detail:{attr('reset')}")
+        print(t.str_detailed())
 
-def cmd_scan(module:Path, pipeline_root:Path, output:Path, recurse:bool, force:bool, verbose:bool, source_space:Path, execute:bool, *args, **kwargs):
+def cmd_scan(module:Path, output:Path, recurse:bool, force:bool, execute:bool):
     """ Produces an executable bash script which correctly computes given part of Pipeline.
 
     TODO: Make each module compute its resource requirements such that a number of running processes can be dynamically managed not toexceed RAM.
@@ -78,7 +78,7 @@ def cmd_scan(module:Path, pipeline_root:Path, output:Path, recurse:bool, force:b
     ```
     """
 
-    modstack = [BaseModule.resolve_module_by_spec(module, pipeline_root, source_space, verbose=verbose)]
+    modstack = [BaseModule.module_lazy_loader(module)]
     per_depth_per_nproc = defaultdict(lambda : defaultdict(list))
     while len(modstack) > 0:
         mod = modstack.pop()
@@ -90,9 +90,7 @@ def cmd_scan(module:Path, pipeline_root:Path, output:Path, recurse:bool, force:b
                 per_depth_per_nproc[d][t.parallelizable].append(f"{str(mod.module_path)} -t {n}" + (" -f" if force else ""))
         if recurse:
             for m in filter(lambda x : x.is_dir(), mod.module_path.glob("[!#_]*")):
-                #print(m)
-                modstack.append(BaseModule.module_lazy_loader(m, source_space, verbose))
-    #pprint(per_depth_per_nproc)
+                modstack.append(BaseModule.module_lazy_loader(m))
 
     if output is None:
         f = sys.stderr
@@ -114,12 +112,12 @@ def cmd_scan(module:Path, pipeline_root:Path, output:Path, recurse:bool, force:b
         f.close()
         os.chmod(output, 0o774)
 
-def cmd_clean(module:Path, target:str|None, pipeline_root:Path, source_space:Path, recurse:bool, force:bool=False, *args, **kwargs) -> None:
+def cmd_clean(module:Path, target:str|None, recurse:bool, force:bool=False) -> None:
     """ Evaluates one particular target piece of data.
 
     `what`: One particular piece of output data, has to be in list of Module's declared outputs.
     """
-    mod = BaseModule.resolve_module_by_spec(module, pipeline_root, source_space)
+    mod = BaseModule.module_lazy_loader(module)
 
     if force:
         raise NotImplementedError("TBD: This should delete anything except files with no-op or rather expect made targets.")
@@ -138,22 +136,13 @@ def cmd_clean(module:Path, target:str|None, pipeline_root:Path, source_space:Pat
             print(f"rm {t.path}")
             os.remove(t.path)
 
-def cmd_report(pipeline_root:Path, *args, **kwargs):
-    """ Just dumps all reports... """
-    print("Root: ", pipeline_root)
-    for report_path in pipeline_root.rglob("Report*/report.txt"):
-        print(report_path)
-        with open(report_path, "r") as f:
-            print(f.read())
-
 def cmd_none(*_, **__):
     print("No command provided. Run with --help to see all options.")
 
 def cmd_not_implemented_yet(*_, **__):
     raise NotImplementedError("Not implemented yet...")
 
-def cmd_tree(module:Path|None, target:str|None, pipeline_root:Path, source_space:Path, output:str|None, verbose:bool, *args, **kwargs):
-
+def cmd_tree(module:Path|None, target:str|None, output:str|None):
     def print_module(m:BaseModule, l:int):
         sep = " |" * l
         count_up_to_date = 0
@@ -172,32 +161,16 @@ def cmd_tree(module:Path|None, target:str|None, pipeline_root:Path, source_space
 
         for d in filter(lambda x : x.is_dir() and x.name not in (".", ".."), m.module_path.glob("*")):
             try:
-                mod = BaseModule.resolve_module_by_spec(d, pipeline_root, source_space, verbose=verbose)
+                mod = BaseModule.module_lazy_loader(d)
                 print_module(mod, l+1)
             except:
                 continue
-
-    if output is not None:
-        raise NotImplementedError("TODO: Graphviz.")
-    if module is None and target is None:
-        for d in filter(lambda x : x.is_dir() and x.name not in (".", ".."), pipeline_root.glob("*")):
-            try:
-                mod = BaseModule.resolve_module_by_spec(d, pipeline_root, source_space, verbose=verbose)
-                print_module(mod, 0)
-            except:
-                continue
-    elif module is not None and target is None:
-        raise NotImplementedError("tbd")
-    elif module is not None and target is not None:
-        raise NotImplementedError("tbd")
-    else:
-        raise ValueError("Tree command needs a module to operate with, you've given only a target.")
+    raise NotImplementedError("TBD. (Earlier version deprecated.)")
 
 # Load arguments
-argp = argparse.ArgumentParser(description="Pipeline Management and Execution Tool. This script can be used to consistently compute whatewer's needed.")
+argp = argparse.ArgumentParser(description="Pipeline Management and Execution Tool.")
 argp.add_argument("--verbose", "-v", action="store_true")
-argp.add_argument("--source-space", "-s", type=Path, default=Path.cwd())
-argp.add_argument("--pipeline-root", "-r", type=Path, default=Path.cwd())
+argp.add_argument("--user-source-space", "-s", type=Path, default=Path.cwd())
 argp.set_defaults(func=cmd_none)
 argps = argp.add_subparsers(description='')
 
@@ -231,12 +204,6 @@ argp_scan.add_argument("--force", "-f", action="store_true", help="Recurse.")
 argp_scan.add_argument("--execute", "-e", action="store_true", help="Pass the commands directly to bash launched as subprocess.")
 argp_scan.set_defaults(func=cmd_scan)
 
-# Report subcommand
-argp_report = argps.add_parser(name="report", description="Performs some reporting.")
-#argp_report.add_argument("module", default=None, type=Path, help="If not given, searches for all terminal modules in the Pipeline and tries to report them together.")
-#argp_report.add_argument("--target", "-t", type=str, required=True, help="An output to be reported. (If not given, whole module will be reported.)")
-argp_report.set_defaults(func=cmd_report)
-
 # Tree subcommand
 argp_tree = argps.add_parser(name="tree", description="Prints the pipeline tree.")
 argp_tree.add_argument("--module", "-m", default=None, type=Path)
@@ -245,24 +212,43 @@ argp_tree.add_argument("--output", "-o", default=None, type=str)
 argp_tree.set_defaults(func=cmd_tree)
 
 # Before parsing, see if there is a config file and try to inject it into the argv.
-#print("This is pypipe.", end="")
 argv = sys.argv[1:]
+POSITIONAL_KEY="__switches__"
 for try_name in (".pypipe.yaml", "pypipe.yaml"):
     if Path(try_name).exists():
-        #print(f" Loading config file {try_name}.", end="")
         with open(try_name, "r") as f:
             inject = safe_load(f)
+        if POSITIONAL_KEY in inject:
+            positionals = inject[POSITIONAL_KEY]
+            assert isinstance(positionals, list) or isinstance(positionals, tuple)
+            del inject[POSITIONAL_KEY]
+        else:
+            positionals = []
         for key, value in inject.items():
             assert isinstance(value, str)
             argv.insert(0, value)
             argv.insert(0, "--" + key)
+        for value in positionals:
+            argv.insert(0, value)
+        print(f"Loaded pypipe config file {try_name}. ")
         break
 
 # Parse the args
+#print("Args: \n" + pformat(argv))
 args = argp.parse_args(argv)
 values = args.__dict__
 if args.verbose:
     print("Configuration reads as follows.")
     pprint(values)
 
-args.func(**values)
+# Cofigure the pypipe library for the rest of this runtime.
+pypipe.VERBOSE = args.verbose; delattr(args, "verbose")
+pypipe.USER_SOURCE_SPACE = args.user_source_space; delattr(args, "user_source_space")
+
+# Execute the required subcommand.
+func = args.func
+delattr(args, "func")
+func(**values)
+
+
+

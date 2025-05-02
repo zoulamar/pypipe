@@ -5,70 +5,37 @@
 
 from pypipe import BaseModule, GenericDataType
 from pathlib import Path
-from pypipe.std_datatypes import NpzDataType, YamlDataType
+from pypipe.datatypes import NpzDataType, YamlDataType
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
-from pypipe.sciplotrc import subplots, IEEE_COL_WIDTH
+from pypipe.sciplotrc import IEEE_COL_WIDTH
 import os
 import shutil
+import numpy as np
 
 class RootModule (BaseModule):
     """ Just a generic class which blocks further recursive submodule search. """
-    def __init__(self, module_path:Path, source_space:Path, verbose:bool) -> None:
-        super().__init__(module_path, source_space, verbose, is_root_module=True)
+    def __init__(self, module_path:Path) -> None:
+        super().__init__(module_path, is_root_module=True)
 
-class Plot (BaseModule):
-    def __init__(self, module_path: Path, source_space: Path, verbose: bool, is_root_module: bool = False) -> None:
-        super().__init__(module_path, source_space, verbose, is_root_module)
-        assert self.parent_module is not None
-        self.parent_module:BaseModule
+class LocalData (RootModule):
+    """ Static data root module. Declares all regexp-selected files as always-ready targets. """
+
+    def __init__(self, module_path: Path) -> None:
+        super().__init__(module_path)
 
     def declare_targets(self) -> dict[str, GenericDataType]:
-        config_file = YamlDataType(self.module_path / "config.yaml", GenericDataType.expect_made)
-        ret:dict[str, GenericDataType] = {}
-
-        # Understand npy files
-        for t_lab, t_obj in GenericDataType.filteritems(self.parent_module.targets,NpzDataType):
-            ret[t_lab] = GenericDataType(self.module_path / t_obj.path.with_suffix(".pdf").name, Plot.npz, depends={"src":t_obj,"cfg":config_file})
-
+        config = YamlDataType(self.module_path / "config.yaml", GenericDataType.expect_made)
+        ret = {}
+        for datafile_path in self.module_path.glob(config.get()["pattern"]):
+            n = GenericDataType(datafile_path, GenericDataType.expect_made, {"config": config})
+            n.expect_made() # Do not heed if config was updated.
+            ret[datafile_path.stem] = n
         return ret
 
-    @staticmethod
-    def npz(target:GenericDataType):
-        cfg = target.depends["cfg"].get()
-        src = target.depends["src"].get()
-
-        if "t" in src:
-            t = src["t"]
-            t = t - t[0]
-            del src["t"]
-        elif "time" in src:
-            t = src["time"]
-            t = t - t[0]
-            del src["time"]
-        else:
-            t = None
-
-        try:
-            with PdfPages(target.path) as pdf:
-                for data_name, data in src.items():
-                    fig = plt.figure(figsize=(IEEE_COL_WIDTH, IEEE_COL_WIDTH*.8))
-                    if t is None:
-                        plt.plot(data)
-                        plt.xlabel("Sample [-]")
-                    else:
-                        plt.plot(t, data)
-                        plt.xlabel("Time [s]")
-                    plt.ylabel(data_name)
-                    pdf.savefig()
-                    plt.close()
-        except:
-            os.remove(target.path)
-            raise
-
 class RemoteData (RootModule):
-    def __init__(self, module_path: Path, source_space: Path, verbose: bool) -> None:
-        super().__init__(module_path, source_space, verbose)
+    def __init__(self, module_path: Path) -> None:
+        super().__init__(module_path)
 
     def declare_targets(self) -> dict[str, GenericDataType]:
         config = YamlDataType(self.module_path / "config.yaml", GenericDataType.expect_made)
@@ -117,3 +84,4 @@ class RemoteData (RootModule):
 
         for dst_path in touch_paths:
             dst_path.touch()
+

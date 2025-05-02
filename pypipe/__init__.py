@@ -1,7 +1,12 @@
 #!/usr/bin/echo Script not meant as executable:
 
-# Filename:  __init__.py
-# Author:    Ing. Martin Zoula (zoulamar@fel.cvut.cz)
+"""
+Filename:  __init__.py
+Author:    Ing. Martin Zoula (zoulamar@fel.cvut.cz)
+
+The core library functionality to provide dataset processing pipelining. Note, that with a single run of the librarym, the PIPELINE_ROOT_PATH, USER_SOURCE_SPACE and VERBOSE module-level variables need to be set properly.
+(TODO? Load it from ENV?)
+"""
 
 import sys
 from abc import ABC, abstractmethod
@@ -15,6 +20,11 @@ import importlib, os, sys
 from pathlib import Path
 from pprint import pformat
 from typing import Dict, List, Union, final, Type, Iterator, Tuple
+
+USER_SOURCE_SPACE:Path|None = None
+""" Directory with user-provided computational modules. """
+VERBOSE:bool = False
+""" Enable verbose debug output to see what is pypipe doing. """
 
 class BaseModule(ABC):
     """ This class provides a convention of a meaningful organizing of the targets.
@@ -38,106 +48,52 @@ class BaseModule(ABC):
 
     @final
     @staticmethod
-    def resolve_module_by_spec(spec:Path, root:Path, source_space:Path, verbose:bool=False) -> "BaseModule":
-        """ Translates some module specificator pattern into absolute module path.
+    def module_lazy_loader(path:Path) -> "BaseModule":
+        """ Match a Python module with given sub-directory of a selected pipeline root. Get a module at given path efficiently without duplicate instances. """
 
-        `spec`: Specification of which particular model to use. If starts with "/", then correct full path from `root` expected. If no slashes present, find by name or label.
-        `root`: Pipeline root.
-        """
-
-        # E.g., the root is pwd and I want to load it.
-        if Path(spec) == root:
-            return BaseModule.module_lazy_loader(root, source_space, verbose)
-
-        # First try whether the specification matches some existing directory. If so, no other hard work needs to be done.
-        if (root / spec).is_dir():
-            return BaseModule.module_lazy_loader(root / spec, source_space, verbose)
-
-        raise NotImplementedError(f"Trying spec {spec}. The following logic was working, but I deem it messy. Hopefully I won't need to see it again soon.")
-
-        # Find a correct folder.
-        print(f"Resolving model given a specification >>{spec}<< w.r.t. selected root module: {root}")
-        if len(spec.parts) == 1:
-            # Search either by module type or label.
-            dotcount = spec.name.count(".")
-            if dotcount == 0:
-                stem, ext = spec.name, ""
-            elif dotcount == 1:
-                stem, ext = spec.name.split(".")
-            else:
-                raise ValueError("Module cannot have more than one dot in name. Note, that dot separates python module name and its label.")
-            print(f"Finding a module type >>{stem}<< with label >>{ext}<<.")
-            if stem == "" and ext != "": # Find by label.
-                hits = list(root.glob(f"**/*.{ext}/"))
-            elif stem != "" and ext == "": # Find by module.label.
-                hits = list(root.glob(f"**/{stem}*/"))
-            elif stem != "" and ext != "": # Find by module.label.
-                hits = list(root.glob(f"**/{stem}.{ext}/"))
-            else:
-                raise ValueError("Not supported.")
-            assert len(hits) == 1, f"Modules have to be labeled uniquely in order to find them thus. Candidates: \n{pformat(hits)}"
-            module_abs = hits[0]
-        else:
-            # Explicit determination.
-            if spec.parts[0] in ("/") or spec.parts[0].startswith("PipelineRoot"):
-                spec = Path(*spec.parts[1:])
-            module_abs = root / spec
-            assert module_abs.is_dir()
-        print(f"Resolved module path: {module_abs.resolve()}")
-        return BaseModule.resolve_module_by_path(module_abs)
-
-    @final
-    @staticmethod
-    def module_lazy_loader(path:Path, source_space:Path, verbose=False) -> "BaseModule":
-        """ Get a module at given path efficiently without duplicate instances. """
-        #level = int((len(inspect.stack()) - 1) / 3) - 1
-        #sep = "> " * level
-        #sep = f"<{path.name:^16}> "
-        sep = f"{path.name}'s "
-
-        assert path.is_dir(), f"The pypipe system requires modules to be directories whereas given {path} is not."
-
+        # Misc. start.
+        assert path.is_dir(), f"The pypipe system requires modules to be directories. Given path {path} is not."
         pymodule_name:str = path.stem
-        if verbose:
+        sep = f"{path.name}'s "
+        if VERBOSE:
             print(f"{sep}module_lazy_loader: Module path: {path}")
             print(f"{sep}module_lazy_loader: Module name: {pymodule_name}")
-            print(f"{sep}module_lazy_loader: Source space: {source_space}")
 
-        # Perform caching.
+        # Perform caching. For a given path, the module is unique.
         if path in BaseModule.ACTIVE_MODULE_REGISTRY:
-            if verbose: print(f"{sep}module_lazy_loader: Using cached module.")
+            if VERBOSE: print(f"{sep}module_lazy_loader: Using cached module.")
             return BaseModule.ACTIVE_MODULE_REGISTRY[path]
 
         # Here the lookup for sources will happen.
         pysrc:Path|None = None
         cls:type|None = None
         for ending in (pymodule_name + '.py', 'source.py', 'src.py'):
-            if verbose: print(f"{sep}module_lazy_loader: Probe {path/ending}")
+            if VERBOSE: print(f"{sep}module_lazy_loader: Probe {path/ending}")
             if (path / ending).is_file():
                 pysrc = path / ending
-                if verbose: print(f"{sep}module_lazy_loader: Found a source file in module's directory {pysrc}")
+                if VERBOSE: print(f"{sep}module_lazy_loader: Found a source file in module's directory {pysrc}")
                 break
         else:
             # If no ad-hoc modules in the directory itself, try project's source space.
-            if source_space is not None:
-                results = sorted(source_space.glob(f"**/{pymodule_name}.py"))
-                if verbose: print(f"{sep}module_lazy_loader: Probe source space {source_space} -> {pformat(results)}")
+            if USER_SOURCE_SPACE is not None:
+                results = sorted(USER_SOURCE_SPACE.glob(f"**/{pymodule_name}.py"))
+                if VERBOSE: print(f"{sep}module_lazy_loader: Probe source space {USER_SOURCE_SPACE} -> {pformat(results)}")
                 if len(results) > 0:
                     selected_result = results[0]
-                    if verbose: print(f"{sep}module_lazy_loader: Found a source file in source space {selected_result}")
+                    if VERBOSE: print(f"{sep}module_lazy_loader: Found a source file in source space {selected_result}")
                     pysrc = selected_result.resolve()
 
             # If still nothing found, fallback to std. modulees.
             if pysrc is None:
-                if verbose: print(f"{sep}module_lazy_loader: Probe std_modules.")
+                if VERBOSE: print(f"{sep}module_lazy_loader: Probe std_modules.")
                 try:
-                    import pypipe.std_modules
-                    cls = pypipe.std_modules.__dict__[pymodule_name]
+                    import pypipe.modules
+                    cls = pypipe.modules.__dict__[pymodule_name]
                     assert cls is not None
                     pysrc = Path("<std_modules>")
-                    if verbose: print(f"{sep}module_lazy_loader: Candidate: {cls}")
+                    if VERBOSE: print(f"{sep}module_lazy_loader: Candidate: {cls}")
                     assert issubclass(cls, BaseModule)
-                    if verbose: print(f"{sep}module_lazy_loader: Found std module {cls}")
+                    if VERBOSE: print(f"{sep}module_lazy_loader: Found std module {cls}")
                 except:
                     cls = None
                     pysrc = None
@@ -145,21 +101,21 @@ class BaseModule(ABC):
         if pysrc is None and cls is None:
             raise ModuleNotFoundError(f"module_lazy_loader: Module for path {path} could not be resolved.")
         elif cls is None and pysrc is not None:
-            if verbose: print(f"{sep}module_lazy_loader: Resulting python module to be loaded {pysrc}")
+            if VERBOSE: print(f"{sep}module_lazy_loader: Resulting python module to be loaded {pysrc}")
 
             pysrc = pysrc.relative_to(Path(os.getcwd()))
-            if verbose: print(f"{sep}module_lazy_loader: Relative path {pysrc}")
+            if VERBOSE: print(f"{sep}module_lazy_loader: Relative path {pysrc}")
 
             pymodspec = str(pysrc.parent / pysrc.stem).replace("/", ".")
-            if verbose: print(f"{sep}module_lazy_loader: Pymodspec {pymodspec}")
+            if VERBOSE: print(f"{sep}module_lazy_loader: Pymodspec {pymodspec}")
 
             pysrc = pysrc.parent
             while True:
                 path_to_add = str(pysrc.resolve())
                 if not path_to_add in sys.path:
-                    if verbose: print(f"{sep}module_lazy_loader: Adding {path_to_add} to PATH.")
+                    if VERBOSE: print(f"{sep}module_lazy_loader: Adding {path_to_add} to PATH.")
                     sys.path.append(path_to_add)
-                elif verbose: print(f"{sep}module_lazy_loader: {path_to_add} already in PATH.")
+                elif VERBOSE: print(f"{sep}module_lazy_loader: {path_to_add} already in PATH.")
                 if pysrc.resolve() == Path.cwd():
                     break
                 pysrc = pysrc.parent
@@ -169,27 +125,28 @@ class BaseModule(ABC):
             except ModuleNotFoundError:
                 print("The module could not be imported. Either the passed directory is not a Module or the Module source is not in Python path.")
                 raise
-            if verbose: print(f"{sep}module_lazy_loader: Imported module {pymod}")
+            if VERBOSE: print(f"{sep}module_lazy_loader: Imported module {pymod}")
 
             candidate_names = (pymodule_name, "Module", "Main")
             for candidate_name in candidate_names:
                 if hasattr(pymod, candidate_name):
                     cls = getattr(pymod, candidate_name)
                     if callable(cls) and issubclass(cls, BaseModule):
-                        if verbose: print(f"{sep}module_lazy_loader: Module type {cls}")
+                        if VERBOSE: print(f"{sep}module_lazy_loader: Module type {cls}")
                         break
             else:
                 raise AttributeError(f"None of candidate_names {candidate_names} was found in the module {pymodule_name}")
-            if verbose: print(f"{sep}module_lazy_loader: Final class in the module: {cls}")
+            if VERBOSE: print(f"{sep}module_lazy_loader: Final class in the module: {cls}")
         else:
             assert cls is not None
 
-        instance = cls(path, source_space, verbose)
-        if verbose: print(f"{sep}module_lazy_loader: Fresh instance {instance}")
+        # Load it, finally.
+        instance = cls(path)
+        if VERBOSE: print(f"{sep}module_lazy_loader: Fresh instance {instance}")
         BaseModule.ACTIVE_MODULE_REGISTRY[path] = instance
         return instance
 
-    def __init__(self, module_path:Path, source_space:Path, verbose:bool, is_root_module:bool = False) -> None:
+    def __init__(self, module_path:Path, is_root_module:bool = False) -> None:
         """ The task now: Prepare the module for a computation. Instantiate Parent Module. Register all output files, either currently available or to-be-computed-yet. Perform sanity checks. """
         super().__init__()
 
@@ -200,10 +157,7 @@ class BaseModule(ABC):
         self.module_path = module_path
         """ A directory containing this module's targets. """
 
-        self.source_space:Path = source_space
-        """ A source space for module lazy loader. """
-
-        self.parent_module:BaseModule|None = None if is_root_module else BaseModule.module_lazy_loader(self.module_path.parent, source_space, verbose)
+        self.parent_module:BaseModule|None = None if is_root_module else BaseModule.module_lazy_loader(self.module_path.parent)
         """ Previous computational stage. None iff this is the root node.  """
 
         self.targets:Dict[str,GenericDataType] = self.declare_targets()
@@ -213,9 +167,6 @@ class BaseModule(ABC):
         source_code_target = GenericDataType(where=self.module_path, maker=GenericDataType.expect_made)
         for _, v in self.targets.items():
             v.depends["__module_source_code__"] = source_code_target
-
-        self.verbose:bool = verbose
-        """ Allows some verbose logging if desired. """
 
         self.make_gitignore()
 
@@ -263,7 +214,7 @@ class BaseModule(ABC):
 
     @final
     def enumerate_pipeline(self) -> List["BaseModule"]:
-        mod_list = [self]
+        mod_list:List[BaseModule] = [self]
         while mod_list[-1].parent_module is not None:
             mod_list.append(mod_list[-1].parent_module)
         return reversed(mod_list) # type: ignore

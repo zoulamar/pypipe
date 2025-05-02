@@ -5,7 +5,7 @@
 
 from pypipe import GenericDataType
 from yaml import safe_load, safe_dump
-from pprint import pprint, pformat
+from pprint import pformat
 import numpy as np
 
 class YamlDataType(GenericDataType):
@@ -17,9 +17,9 @@ class YamlDataType(GenericDataType):
         with open(str(self.path), "w") as f:
             safe_dump(self.value, f)
 
-    def str_detailed(self):
+    def str_detailed(self)->str:
         loaded = self.load()
-        pprint(loaded)
+        return pformat(loaded)
 
 class NpzDataType(GenericDataType):
     """ Numpy-centric storage of several named arrays in a zip archive. """
@@ -36,11 +36,10 @@ class NpzDataType(GenericDataType):
         try:
             loaded = self.get()
             assert isinstance(loaded, dict)
-            out = ""
+            out = []
             for label, data in loaded.items():
-                out += f"Array '{label}' of shape {data.shape}:\n"
-                out += pformat(data)
-            return out
+                out.append(f"Array '{label}' of shape {data.shape}.")
+            return "\n".join(out)
         except FileNotFoundError:
             return f"File not ready yet."
 
