@@ -14,6 +14,7 @@ setup(
        'colored',
        'pyyaml',
        'numpy',
+       'matplotlib',
     ]
 )
 

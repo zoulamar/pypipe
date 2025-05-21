@@ -53,7 +53,7 @@ class BaseModule(ABC):
 
         # Misc. start.
         assert path.is_dir(), f"The pypipe system requires modules to be directories. Given path {path} is not."
-        pymodule_name:str = path.stem
+        pymodule_name:str = path.stem # NOTE: This separates the stage's label from stage module.
         sep = f"{path.name}'s "
         if VERBOSE:
             print(f"{sep}module_lazy_loader: Module path: {path}")
@@ -94,9 +94,9 @@ class BaseModule(ABC):
                     if VERBOSE: print(f"{sep}module_lazy_loader: Candidate: {cls}")
                     assert issubclass(cls, BaseModule)
                     if VERBOSE: print(f"{sep}module_lazy_loader: Found std module {cls}")
-                except:
-                    cls = None
-                    pysrc = None
+                except Exception as e:
+                    e.add_note("")
+                    raise
 
         if pysrc is None and cls is None:
             raise ModuleNotFoundError(f"module_lazy_loader: Module for path {path} could not be resolved.")

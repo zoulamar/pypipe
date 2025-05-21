@@ -43,6 +43,10 @@ class NpzDataType(GenericDataType):
         except FileNotFoundError:
             return f"File not ready yet."
 
-    def plot(self, into):
-        raise NotImplementedError()
+    def to_array(self, keys:None|list[str]|set[str] = None):
+        data:dict[str,np.ndarray] = self.get()
+        if keys is None:
+            return np.array(list(data.values())).T
+        else:
+            return np.array([v for k, v in data if k in keys]).T
 

@@ -2,6 +2,7 @@
 
 Data evaluation and experimentation framework.
 Developed during the course of my [master thesis](http://hdl.handle.net/10467/107070) to keep track of different machine learning experiments and settings I had to try out and compare.
+Reusable code was later separated and published under this repository.
 The pypipe can be likened to a python-based build system with several strong conventions to keep the experimentation sanity.
 An experiment is a collection of computational stages, each taking some inputs and producing some outputs.
 Commonly, one source data is processed by several different versions of an algorithm, creating nested tree-like fork structure of the modified data.
@@ -11,13 +12,11 @@ Each stage comprises files (targets) either direct (static, already existent), o
 There can be multiple data instances which can be evaluated in parallel, each such instance is a separate file / target; the pypipe is can generate a GNU Parallel script to run all the stages with full CPU utilization.
 For details, please read the documentation in the code; proper introductions and manuals to be done.
 
-# Installation
+# Get started
 
-Unfortunately, as of 2025, current installation via setuptools is broken - dependencies are not installed automatically.
-Will be fixed when needed.
-
-# Usage:
-
+```
+pip3 install git+https://github.com/zoulamar/pypipe
+```
 
 # In comparison to ...
 
@@ -50,6 +49,11 @@ At least according to [rationale](https://juliadynamics.github.io/DrWatson.jl/st
 - Paywall, account, vendor lock, ...
 - Artifacts and runs instead of files and "stages" in `pypipe`.
 - Seems like it is heavily cloud-oriented. Again, why not, if someone needs to store artifacts on server, let them have it; great tools exist to do the job.
+
+## [joblib](https://joblib.readthedocs.io/)
+
+- Offers tools for persistent function memoization, arbitrary (pickle-like) object representations and parallel processing in Python.
+- Although somewhat similar to `pypipe`, both tools solve different aspects of the problem. Mainly, `pypipe` tackles more generic build system problem of turning one file into another, whereas `joblib` enhances Python scripts with added functionality of result caching or paralelism.
 
 ## Doing it by hand / custom scripts
 
